@@ -1,0 +1,420 @@
+
+<div id="pitchers" style="margin-top:30px">
+  <h3>Pitchers</h3>
+  <div class="container stats-listings">
+
+  <% @pitchers.each_with_index do |pitcher, index| %>
+    <% if index % 4 == 0 %>
+      <div class="row">
+    <% end %>
+
+    <div class="col-md-3" id="<%= "#{pitcher.pitcher_id}-#{pitcher.year}-#{pitcher.organization}" %>">
+      <div class="player-photo">
+        <%= image_tag "/playerPhotos/#{pitcher.pitcher_id}.jpg", size: "63x93" %><br/>
+        <%= link_to "#{pitcher.name.gsub(",","")} (#{pitcher.year} #{pitcher.organization})", pitcher %>
+      </div>
+      <div class="row stats-row">
+        <div class="col-md-3">Games Played:</div>
+        <div class="col-md-3"><%= pitcher.games_played %></div>
+        <div class="col-md-3">Games Started:</div>
+        <div class="col-md-3"><%= pitcher.games_started %></div>
+      </div>
+      <div class="row stats-row">
+        <div class="col-md-3">ERA:</div>
+        <div class="col-md-3"><%= pitcher.era %></div>
+        <div class="col-md-3">FIP:</div>
+        <div class="col-md-3"><%= pitcher.fip %></div>
+      </div>
+      <div class="row stats-row">
+        <div class="col-md-3">Batters Faced:</div>
+        <div class="col-md-3"><%= pitcher.batters_faced %></div>
+        <div class="col-md-3">Strikeouts:</div>
+        <div class="col-md-3"><%= pitcher.strikeouts %></div>
+      </div>
+      <div class="row stats-row">
+        <div class="col-md-3">Singles:</div>
+        <div class="col-md-3"><%= pitcher.singles %></div>
+        <div class="col-md-3">Doubles:</div>
+        <div class="col-md-3"><%= pitcher.doubles %></div>
+      </div>
+      <div class="row stats-row">
+        <div class="col-md-3">Triples:</div>
+        <div class="col-md-3"><%= pitcher.triples %></div>
+        <div class="col-md-3">Home Runs:</div>
+        <div class="col-md-3"><%= pitcher.homers %></div>
+      </div>
+    </div>
+
+    <% if (index % 4 == 3) || (index == @pitchers.count) %>
+      </div>
+    <% end %>
+  <% end %>
+
+  </div>
+</div>
+
+<h3>Pitch Tracker</h3>
+
+    <script src="http://code.jquery.com/jquery-1.8.3.min.js" type="text/javascript" charset="utf-8"></script>
+
+    <style type="text/css">
+      .axis path,
+        .axis line {
+          fill: none;
+          stroke: #000;
+          shape-rendering: crispEdges;
+          opacity: 1;
+        }
+
+        .axis text { font-size:10px; }
+
+        body { font: 12px sans-serif; }
+        .circles { opacity: .5; }
+
+        .tipsy { font-size:11px; margin-top:-10px;}
+
+        .guide line {
+          fill: none;
+          stroke: #000;
+          shape-rendering: crispEdges;
+          opacity: 0;
+        }
+    </style>
+
+    <div id="pitcherFilter" class="filter-field">
+      <b>Pitcher</b>:
+    </div>
+    
+    <div id="pitchTypeFilter" class="filter-field">
+      <b>Pitch Type</b>:
+    </div>
+    
+    <div id="eventTypeFilter" class="filter-field">
+      <b>Pitch Result</b>:
+    </div>
+    
+    <div id="chart" style="margin-left: 30px"></div>
+
+    <script type="text/javascript">
+    
+      var margin = {t:30, r:20, b:20, l:40},
+        w = 600 - margin.l - margin.r,
+            h = 500 - margin.t - margin.b,
+            x = d3.scale.linear().range([0,w]),
+            y = d3.scale.linear().range([h - 60, 0]),
+            color = d3.scale.category10();
+        
+      var svg = d3.select("#chart").append("svg")
+        .attr("width", w + margin.l + margin.r)
+            .attr("height", h + margin.t + margin.b);
+        
+      var xAxis = d3.svg.axis()
+        .scale(x)
+            .ticks(5)
+        .tickSubdivide(true)
+            .tickSize(6, 3, 0)
+            .orient("bottom");
+        
+      var yAxis = d3.svg.axis()
+            .scale(y)
+            .ticks(5)
+            .tickSubdivide(true)
+            .tickSize(6,3,0)
+            .orient("left");
+        
+      // group that will contain all of the plots
+      var groups = svg.append("g").attr("transform", "translate(" + margin.l + "," + margin.t + ")");
+    
+      var pitchTypes = ["FA","FF","FT","SI","FS","FC","FO","CU","KC","EP","CH","SC","KN","AB","UN"];
+      var uniqPitchOptions = [
+        {"id": "-1", "label": "All Pitches"},
+        {"id": "FA", "label": "Fastball"},
+        {"id": "FF", "label": "Four-seam Fastball"},
+        {"id": "FT", "label": "Two-seam Fastball"},
+        {"id": "SI", "label": "Sinker"},
+        {"id": "FS", "label": "Splitter"},
+        {"id": "SL", "label": "Slider"},
+        {"id": "FC", "label": "Cutter"},
+        {"id": "FO", "label": "Pitch Out (FO)"},
+        {"id": "PO", "label": "Pitch Out (PO)"},
+        {"id": "CU", "label": "Curveball"},
+        {"id": "KC", "label": "Knuckle Curve"},
+        {"id": "EP", "label": "Eephus"},
+        {"id": "CH", "label": "Changeup"},
+        {"id": "SC", "label": "Screwball"},
+        {"id": "KN", "label": "Knuckleball"},
+        {"id": "AB", "label": "Auto. ball"},
+        {"id": "UN", "label": "Unidentified"}
+      ];
+      
+      var getPitcherAndTypes = function(){
+        var pitchTypeFilter = document.getElementById("pitchTypeFilter");
+        var pitchTypeSelector = pitchTypeFilter.getElementsByTagName("select")[0];
+        var selectedPitchType = pitchTypeSelector[pitchTypeSelector.selectedIndex].value;
+
+        var pitcherFilter = document.getElementById("pitcherFilter");
+        var pitcherSelector = pitcherFilter.getElementsByTagName("select")[0];
+        var selectedPitcher = pitcherSelector[pitcherSelector.selectedIndex].value;
+          
+        var eventTypeFilter = document.getElementById("eventTypeFilter");
+        var eventTypeSelector = eventTypeFilter.getElementsByTagName("select")[0];
+        var selectedEventType = eventTypeSelector[eventTypeSelector.selectedIndex].value;
+
+        return [selectedPitcher, selectedPitchType, selectedEventType];  
+      }
+      
+      var pitchTypeDropDown = d3.select("#pitchTypeFilter")
+                                .append("select")
+                                .attr("class", "select")
+                                .attr("name", "pitch-types-list")
+                                .on('change', function(){
+                                  var pitcherAndType = getPitcherAndTypes();
+                                  drawCircles( pitcherAndType[0], pitcherAndType[1], pitcherAndType[2] );
+                                });
+          
+      var drawCircles;
+      
+      var pitcherDropDown = d3.select("#pitcherFilter")
+                              .append("select")
+                              .attr("class","select")
+                              .attr("name","pitcher-list")
+                              .on('change', function(){
+                                var pitcherAndType = getPitcherAndTypes();
+                                drawCircles( pitcherAndType[0], pitcherAndType[1], pitcherAndType[2] );
+                              });
+       
+      var eventTypeDropDown = d3.select("#eventTypeFilter")
+                                .append("select")
+                                .attr("class","select")
+                                .attr("name","pitch-result-list")
+                                .on("change", function(){
+                                  var pitcherAndType = getPitcherAndTypes();
+                                  drawCircles(pitcherAndType[0], pitcherAndType[1], pitcherAndType[2]);
+                                });
+
+      d3.csv("Pitchfx.csv", function(data){
+      
+        var uniq = _.uniqBy( data, function(pitch){
+          return pitch.sv_pitch_id;
+        });
+          
+        var x0 = Math.max(-d3.min(data, function(d) { return d.trust; }), d3.max(data, function(d) { return d.trust; }));
+        x.domain([-6, 5]);
+        y.domain([-3, 8])
+        
+        drawCircles = function(playerId, pitchType, eventType){
+          var currentPlayerData;
+          if( playerId == "-1" ){
+            currentPlayerData = uniq;
+          } else {
+            currentPlayerData = _.filter( uniq, function(pitch){
+              return pitch.pitcher_id == playerId;
+            });
+          }
+            
+          if( pitchType !== "-1" ){
+            currentPlayerData = _.filter(currentPlayerData, function(pitch){
+              return pitch.pitch_type == pitchType;
+            });
+          }
+            
+          if( eventType !== "-1" ){
+            currentPlayerData = _.filter(currentPlayerData, function(pitch){
+              return pitch.event_type == eventType;
+            });
+          }
+
+          // RDEBUG: Find a way to filter against the circles that were already drawn,
+          // RDEBUG: versus removing them all and drawing new ones
+          groups.selectAll("circle").remove();
+          
+          // RDEBUG: These are circles; eventually get different shapes by pitch result
+          var circles = groups.selectAll("circle")
+                              .data(currentPlayerData)
+                              .enter().append("circle")
+                              .attr("class", "circles")
+                              .attr({
+                                cx: function(d) { return x(+d.plate_x); },
+                                cy: function(d) { return y(+d.plate_z); },
+                                r: 6,
+                                id: function(d) { return d.sv_pitch_id; }
+                              })
+                             .style("fill", function(d) { return color(d.pitcher_id); });
+              
+          var mouseOn = function() { 
+          var circle = d3.select(this);
+
+          // transition to increase size/opacity of bubble
+          circle.transition()
+                .duration(800).style("opacity", 1)
+                .attr("r", 16).ease("elastic");
+
+          // append lines to bubbles that will be used to show the precise data points.
+          // translate their location based on margins
+          svg.append("g")
+             .attr("class", "guide")
+             .append("line")
+             .attr("x1", circle.attr("cx"))
+             .attr("x2", circle.attr("cx"))
+             .attr("y1", +circle.attr("cy") + 26)
+             .attr("y2", h - margin.t - margin.b)
+             .attr("transform", "translate(40,20)")
+             .style("stroke", circle.style("fill"))
+             .transition().delay(200).duration(400).styleTween("opacity", 
+                        function() { return d3.interpolate(0, .5); })
+
+         svg.append("g")
+            .attr("class", "guide")
+            .append("line")
+            .attr("x1", +circle.attr("cx") - 16)
+            .attr("x2", 0)
+            .attr("y1", circle.attr("cy"))
+            .attr("y2", circle.attr("cy"))
+            .attr("transform", "translate(40,30)")
+            .style("stroke", circle.style("fill"))
+            .transition().delay(200).duration(400).styleTween("opacity", 
+                        function() { return d3.interpolate(0, .5); });
+
+         // function to move mouseover item to front of SVG stage, in case
+         // another bubble overlaps it
+         d3.selection.prototype.moveToFront = function() { 
+           return this.each(function() { 
+             this.parentNode.appendChild(this); 
+           }); 
+         };
+
+         // skip this functionality for IE9, which doesn't like it
+         if (!$.browser.msie) {
+           circle.moveToFront();    
+         }
+       };
+     
+       var mouseOff = function() {
+         var circle = d3.select(this);
+
+         // go back to original size and opacity
+         circle.transition()
+               .duration(800)
+               .style("opacity", .5)
+               .attr("r", 8)
+               .ease("elastic");
+
+         // fade out guide lines, then remove them
+         d3.selectAll(".guide")
+           .transition()
+           .duration(100)
+           .styleTween("opacity", function() { return d3.interpolate(.5, 0); })
+           .remove()
+       };
+    
+       // run the mouseon/out functions
+       circles.on("mouseover", mouseOn);
+       circles.on("mouseout", mouseOff);
+
+       circles.append("title")
+              .text(function(d) { 
+         
+                var message = "";
+         
+                var pitchType = _.find( uniqPitchOptions, function(pitchType){
+                  return pitchType.id == d.pitch_type;
+                });
+
+                if( pitchType ){        
+                  message += "<b>Pitch Type</b>: " + pitchType.label + "<br/>";
+                } else{
+                  // Some pitch types aren't identified in the PDF and I don't want them to cause an error
+                  console.log( "Couldn't find pitch type: " + d.pitch_type );
+                }
+                message += "<b>Event Type</b>: " + d.event_type + "<br/>";
+                if( d.event_result !== "" ){
+                  message += "<b>Event Result</b>: " + d.event_result + "<br/>";
+                }
+                message += "<b>Break (x,z)</b>: (" + d.break_x + ", " + d.break_z + ")<br/>";
+                message += "<b>Plate (x,z)</b>: (" + d.plate_x + ", " + d.plate_z + ")<br/>";
+         
+                return message;
+
+              });
+       
+    //$(".circles").tipsy({ gravity: 's', html: true });
+              
+              return circles;
+        };
+        
+        // Initially draw circles for all players and all pitch types
+        var circles = drawCircles("-1","-1","-1");
+
+        var uniqPitchers = _.uniq( _.map( uniq, 'pitcher_id') );
+        var uniqPitcherOptions = _.union(["-1"],uniqPitchers);
+          
+        // RDEBUG: Use the player data to map ID to name
+        var pitcherOptions = pitcherDropDown.selectAll("option")
+          .data(uniqPitcherOptions)
+          .enter()
+          .append("option")
+          .text(function (d) {
+            if( d === "501957" ){
+              return "Chris Tillman";
+            } else if( d === "592332") {
+              return "Kevin Gausman";
+            } else if( d === "-1" ){
+              return "All Pitchers Combined";
+            }
+          })
+         .attr("value", function (d) { return d; });
+
+        var pitchOptions = pitchTypeDropDown.selectAll("option")
+          .data( uniqPitchOptions )
+          .enter()
+          .append("option")
+          .text(function(d){ return d.label;})
+          .attr("value", function(d){ return d.id; });
+      
+        var uniqEventTypes = [
+          {"id":"-1", "label": "All Results"},
+          {"id":"ball", "label": "Ball"},
+          {"id":"called_strike", "label": "Called Strike"},
+          {"id":"swinging_strike", "label": "Swinging Strike"},
+          {"id":"hit_into_play", "label": "Hit Into Play"},
+          {"id":"hit_into_play_no_out", "label": "Hit Into Play (No Out)"},
+          {"id":"hit_into_play_score", "label": "Hit Into Play (Score)"},
+         ];
+         var eventTypeOptions = eventTypeDropDown.selectAll("option")
+           .data( uniqEventTypes )
+           .enter()
+           .append("option")
+           .text(function(d){ return d.label; })
+           .attr("value", function(d){ return d.id; });
+      
+         // draw axes and axis labels
+         svg.append("g")
+           .attr("class", "x axis")
+           .attr("transform", "translate(" + margin.l + "," + (h - 60 + margin.t) + ")")
+           .call(xAxis);
+
+         svg.append("g")
+            .attr("class", "y axis")
+            .attr("transform", "translate(" + margin.l + "," + margin.t + ")")
+            .call(yAxis);
+
+         svg.append("text")
+            .attr("class", "x label")
+            .attr("text-anchor", "end")
+            .attr("x", w + 50)
+            .attr("y", h - margin.t - 5)
+            .text("Plate X");
+
+         svg.append("text")
+           .attr("class", "y label")
+           .attr("text-anchor", "end")
+           .attr("x", -20)
+           .attr("y", 45)
+           .attr("dy", ".75em")
+           .attr("transform", "rotate(-90)")
+           .text("Plate Z");
+      });
+    
+    </script>
+
+

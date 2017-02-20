@@ -1,0 +1,22 @@
+<div class="player-bio">
+  <div class="container">
+    <div class="row">
+      <div class="col-5">
+        <%= image_tag "/playerPhotos/#{@pitcher.pitcher_id}.jpg", size: "126x186" %><br/>
+        <%= "#{@pitcher.name.gsub(",","")} (#{@pitcher.year} #{@pitcher.organization})" %>
+      </div>
+      <div class="col-7">
+
+      </div>
+    </div>
+  </div>
+
+
+
+
+  <div style="margin-top:40px;">
+    <%= button_to "Back to All Pitchers", root_path, class: "btn btn-success" %>
+  </div>
+</div>
+
+
